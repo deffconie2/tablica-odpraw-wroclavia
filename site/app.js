@@ -147,9 +147,10 @@ function renderBoard(){
     const x=s[p.id], lv=level(x.total);
     box.append(h("button",{class:"score"+(p.id===me?" is-me":""),type:"button","aria-expanded":String(showDetails),title:"Ranking i odznaki",onclick:toggleDetails},
       av(p.id),
-      h("span",{class:"score-l1"},h("span",null,p.name+(p.id===me?" · ty":"")),h("b",null,String(x.week)),
-        (maxW>0&&leaders.length===1&&leaders[0].id===p.id)?h("span",{class:"tag"},"MVP"):null),
-      h("span",{class:"score-l2"},"Lv "+lv.n,h("span",{class:"meter",role:"img","aria-label":"Postęp do następnego poziomu: "+Math.round(lv.pct*100)+"%"},h("i",{style:"width:"+Math.round(lv.pct*100)+"%"})),"pkt/tydz.")
+      // big number is the running total; the weekly gain (resets every Monday) sits beside the level bar
+      h("span",{class:"score-l1"},h("span",null,p.name+(p.id===me?" · ty":"")),h("b",{title:"Punkty łącznie"},String(x.total)),
+        (maxW>0&&leaders.length===1&&leaders[0].id===p.id)?h("span",{class:"tag",title:"Najwięcej punktów w tym tygodniu"},"MVP tyg."):null),
+      h("span",{class:"score-l2"},"Lv "+lv.n,h("span",{class:"meter",role:"img","aria-label":"Postęp do następnego poziomu: "+Math.round(lv.pct*100)+"%"},h("i",{style:"width:"+Math.round(lv.pct*100)+"%"})),"+"+x.week+" w tym tyg.")
     ));
   }
   const d=$("#details"); d.hidden=!showDetails; d.replaceChildren();
