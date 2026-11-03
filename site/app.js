@@ -34,6 +34,7 @@ const ICON={
   chat:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>',
   cal:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5.5" width="16" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
   trash:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M10 7V4.5h4V7M7 7l1 12.5h8L17 7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg>',
+  doc:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 3.5h8l4 4v13h-12z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M14.5 3.5v4h4M9 12h6M9 15.5h6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
   eye:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>',
   plus:'<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
 };
@@ -544,9 +545,110 @@ $("#reset-btn").addEventListener("click",async()=>{
   if(ok){$("#who").hidden=true;toast(T[me].name+" · punkty wyzerowane");}
 });
 
+/* weekly report — only for REPORT_FOR; inline styles so it pastes cleanly into Outlook */
+const REPORT_FOR=["michal"];
+const canReport=()=>!!me&&REPORT_FOR.includes(me);
+const R_TONE={pilne:"#c3412f",wazne:"#b9770a",biezace:"#2b7f9e"};
+const R_FIRM={atalian:["#b45309","#fff3e6"],amlux:["#2563a8","#eaf2fc"],impel:["#23784a","#e8f6ed"],urw:["#c8102e","#fdeaec"]};
+let reportWeek="prev";
+function reportRange(which){
+  const start=new Date(weekStart());
+  if(which==="prev"){const from=new Date(start);from.setDate(from.getDate()-7);return [from.getTime(),start.getTime()];}
+  return [start.getTime(),Date.now()];
+}
+const dmy=ts=>new Date(ts).toLocaleDateString("pl-PL",{day:"2-digit",month:"2-digit",year:"numeric"});
+const pname=id=>T[id]?T[id].name:"—";
+function buildReport(which){
+  const [from,to]=reportRange(which), today=todayStr();
+  const open=tasks.filter(isOpenTask).sort(cmp);
+  const closed=tasks.filter(t=>t.kind==="task"&&t.done&&t.doneAt>=from&&t.doneAt<to).sort((a,b)=>a.doneAt-b.doneAt);
+  const odp=odprawy.filter(o=>o.at>=from&&o.at<to&&T[o.who]);
+  const late=open.filter(t=>t.due&&t.due<today).length;
+  const ontime=closed.filter(t=>t.due&&t.doneAt<=endOfDay(t.due)).length;
+  const S={
+    wrap:"font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#1b2624;line-height:1.4",
+    h1:"font-size:20px;margin:0 0 4px",sub:"color:#5f6f6b;margin:0 0 16px",
+    h2:"font-size:15px;margin:22px 0 8px",
+    table:"border-collapse:collapse;width:100%;margin:0 0 6px",
+    th:"text-align:left;font-size:12px;color:#5f6f6b;background:#f1f4f2;padding:6px 8px;border-bottom:1px solid #d1dad6",
+    td:"padding:6px 8px;border-bottom:1px solid #e3e8e5;vertical-align:top",
+    num:"padding:6px 8px;border-bottom:1px solid #e3e8e5;text-align:right;font-weight:bold",
+    muted:"color:#5f6f6b",late:"color:#c3412f;font-weight:bold",ok:"color:#2c8a4f;font-weight:bold",
+  };
+  const firmCell=f=>R_FIRM[f]?h("span",{style:`color:${R_FIRM[f][0]};background:${R_FIRM[f][1]};padding:1px 6px;border-radius:4px;font-weight:bold;font-size:12px`},F[f].name):h("span",{style:S.muted},"—");
+  // head: [label, width%, numeric?]; fixed widths keep the per-column tables aligned
+  const table=(head,rows)=>h("table",{style:S.table+";table-layout:fixed",cellpadding:"0",cellspacing:"0"},
+    head.length?h("thead",null,h("tr",null,head.map(([x,w,n])=>h("th",{style:S.th+(w?";width:"+w+"%":"")+(n?";text-align:right":"")},x)))):null,
+    h("tbody",null,rows));
+  const dueCell=t=>!t.due?h("span",{style:S.muted},"—")
+    :t.due<today?h("span",{style:S.late},dmy(t.due+"T12:00")+" · po terminie")
+    :t.due===today?h("b",null,"dziś"):dmy(t.due+"T12:00");
+  const box=h("div",{style:S.wrap});
+  box.append(h("h1",{style:S.h1},"Tablica odpraw — raport tygodniowy"),
+    h("p",{style:S.sub},(which==="prev"?"Poprzedni tydzień: ":"Ten tydzień: ")+dmy(from)+" – "+dmy(to-1)+" · wygenerowano "+dmy(Date.now())));
+  // summary
+  box.append(h("h2",{style:S.h2},"Podsumowanie"),
+    table([],[
+      h("tr",null,h("td",{style:S.td},"Otwarte zadania"),h("td",{style:S.num},String(open.length))),
+      h("tr",null,h("td",{style:S.td},"…w tym po terminie"),h("td",{style:S.num+(late?";color:#c3412f":"")},String(late))),
+      h("tr",null,h("td",{style:S.td},"Zamknięte w tym okresie"),h("td",{style:S.num},String(closed.length))),
+      h("tr",null,h("td",{style:S.td},"…w tym w terminie"),h("td",{style:S.num},String(ontime))),
+      h("tr",null,h("td",{style:S.td},"Odprawy"),h("td",{style:S.num},String(odp.length)+(odp.length?"  ("+SCORED.map(p=>p.name+" "+odp.filter(o=>o.who===p.id).length).join(", ")+")":""))),
+    ]));
+  const firms=[...FIRMS.map(f=>f.id),null].filter(f=>open.concat(closed).some(t=>(F[t.firm]?t.firm:null)===f));
+  if(firms.length) box.append(h("h2",{style:S.h2},"Według firm"),
+    table([["Firma",40],["Otwarte",20,1],["Po terminie",20,1],["Zamknięte",20,1]],firms.map(f=>{
+      const o=open.filter(t=>(F[t.firm]?t.firm:null)===f), c=closed.filter(t=>(F[t.firm]?t.firm:null)===f);
+      return h("tr",null,h("td",{style:S.td},f?firmCell(f):"Bez firmy"),h("td",{style:S.num},String(o.length)),
+        h("td",{style:S.num},String(o.filter(t=>t.due&&t.due<today).length)),h("td",{style:S.num},String(c.length)));
+    })));
+  // open tasks by column
+  box.append(h("h2",{style:S.h2},"Otwarte zadania ("+open.length+")"));
+  if(!open.length) box.append(h("p",{style:S.muted},"Brak otwartych zadań."));
+  for(const sct of SECTIONS){
+    const list=open.filter(t=>prioOf(t)===sct.k); if(!list.length) continue;
+    box.append(h("p",{style:`margin:12px 0 4px;font-weight:bold;color:${R_TONE[sct.k]}`},sct.label+" ("+list.length+")"),
+      table([["Zadanie",52],["Firma",13],["Termin",22],["Dodał(a)",13]],list.map(t=>h("tr",null,
+        h("td",{style:S.td},t.text),h("td",{style:S.td},firmCell(t.firm)),h("td",{style:S.td},dueCell(t)),h("td",{style:S.td},pname(t.by))))));
+  }
+  // closed in range
+  box.append(h("h2",{style:S.h2},"Zamknięte "+(which==="prev"?"w poprzednim tygodniu":"w tym tygodniu")+" ("+closed.length+")"));
+  if(!closed.length) box.append(h("p",{style:S.muted},"Nic nie zostało zamknięte w tym okresie."));
+  else box.append(table([["Zadanie",40],["Firma",13],["Zamknął(a)",13],["Kiedy",13],["Termin",21]],closed.map(t=>h("tr",null,
+    h("td",{style:S.td},t.text),h("td",{style:S.td},firmCell(t.firm)),h("td",{style:S.td},pname(t.doneBy)),h("td",{style:S.td},dmy(t.doneAt)),
+    h("td",{style:S.td},!t.due?h("span",{style:S.muted},"—"):t.doneAt<=endOfDay(t.due)?h("span",{style:S.ok},"w terminie"):h("span",{style:S.late},"po terminie ("+dmy(t.due+"T12:00")+")"))))));
+  box.append(h("p",{style:S.sub+";margin-top:22px"},"Tablica: ",h("a",{href:location.origin+location.pathname,style:"color:#1f7a5a"},location.origin+location.pathname)));
+  return box;
+}
+function openReport(){
+  if(!canReport()) return;
+  $("#report-body").replaceChildren(buildReport(reportWeek));
+  document.querySelectorAll("#report .seg button").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.w===reportWeek)));
+  $("#report").hidden=false; $("#report-copy").focus();
+}
+async function copyReport(){
+  const el=$("#report-body"), done=()=>toast("Skopiowano — wklej w mailu (Ctrl+V)");
+  try{
+    await navigator.clipboard.write([new ClipboardItem({"text/html":new Blob([el.innerHTML],{type:"text/html"}),"text/plain":new Blob([el.innerText],{type:"text/plain"})})]);
+    done();
+  }catch(e){ // older browsers: copy the rendered selection instead
+    const r=document.createRange(); r.selectNodeContents(el); const sel=getSelection(); sel.removeAllRanges(); sel.addRange(r);
+    const ok=document.execCommand("copy"); sel.removeAllRanges();
+    ok?done():toast("Nie udało się skopiować. Zaznacz raport i skopiuj ręcznie.");
+  }
+}
+$("#report-btn").addEventListener("click",openReport);
+$("#report-close").addEventListener("click",()=>{$("#report").hidden=true;});
+$("#report").addEventListener("keydown",e=>{if(e.key==="Escape")$("#report").hidden=true;});
+$("#report").addEventListener("click",e=>{if(e.target.id==="report")$("#report").hidden=true;});
+$("#report-copy").addEventListener("click",copyReport);
+$("#report-print").addEventListener("click",()=>window.print());
+document.querySelectorAll("#report .seg button").forEach(b=>b.addEventListener("click",()=>{reportWeek=b.dataset.w;openReport();}));
+
 /* view mode */
 function renderView(){
   document.body.classList.toggle("present",present);
+  const rb=$("#report-btn"); rb.hidden=!canReport(); rb.replaceChildren(ic("doc"),"Raport");
   const b=$("#view-btn"); b.setAttribute("aria-pressed",String(present));
   b.replaceChildren(ic("eye"),present?"Pokaż punkty":"Tylko zadania");
   b.title=present?"Wróć do pełnego widoku z punktami":"Schowaj punkty i odprawy, np. żeby pokazać zadania komuś spoza zespołu";
