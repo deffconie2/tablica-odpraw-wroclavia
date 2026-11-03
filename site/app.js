@@ -610,7 +610,10 @@ buildCols();
 renderAll();
 
 (async()=>{
+  const booted=()=>document.body.classList.remove("booting");
+  setTimeout(booted,10000); // never leave someone stuck on the loading screen
   if(!CFG.firebase){
+    booted();
     banner("Tryb demo: dane zapisują się tylko w tej przeglądarce. Wspólna tablica dla zespołu — patrz README.",true);
     start(OdprawyStore.local());
     if(!me) openWho();
@@ -618,9 +621,10 @@ renderAll();
   }
   let fb;
   try{ fb=await OdprawyStore.firebase(CFG.firebase); }
-  catch(e){ offlineMsg="Nie udało się połączyć z serwerem tablicy."; banner("Nie załadowano Firebase. Sprawdź internet i odśwież stronę."); renderCols(); return; }
+  catch(e){ booted(); offlineMsg="Nie udało się połączyć z serwerem tablicy."; banner("Nie załadowano Firebase. Sprawdź internet i odśwież stronę."); renderCols(); return; }
   auth=fb.auth; fbApi=fb;
   auth.onAuthStateChanged(async user=>{
+    booted();
     if(!user){ stop(); me=null; $("#who").hidden=true; offlineMsg="Zaloguj się, żeby zobaczyć tablicę."; banner(""); renderAll(); showLogin(); return; }
     $("#login").hidden=true;
     const email=String(user.email||"").toLowerCase();

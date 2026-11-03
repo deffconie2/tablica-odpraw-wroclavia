@@ -230,6 +230,9 @@ button,input,select{font-family:inherit}
 .ver{margin:12px 0 0!important;font-size:11px;color:var(--muted);text-align:center}
 .pw-form{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
 .login-err{min-height:1.2em;margin:0;font-size:12.5px;color:var(--danger)}
+/* until the login state is known only a loading screen shows, so the empty board never flashes */
+.booting .app{visibility:hidden}
+.booting::after{content:"Ładowanie…";position:fixed;inset:0;z-index:50;display:grid;place-items:center;background:var(--bar);color:var(--bar-muted);font:600 14px var(--f-body)}
 #toast{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom, 0px));transform:translate(-50%,12px);z-index:40;background:var(--fg);color:var(--card);padding:9px 16px;border-radius:999px;font-size:13px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;max-width:calc(100% - 32px);text-align:center}
 #toast.show{opacity:1;transform:translate(-50%,0)}
 #toast .pts{color:var(--hivis)}
@@ -249,7 +252,7 @@ button,input,select{font-family:inherit}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
-<body>
+<body class="booting">
 <div class="app">
   <header class="top gut">
     <div class="brand">
