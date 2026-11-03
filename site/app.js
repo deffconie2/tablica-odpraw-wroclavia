@@ -4,9 +4,12 @@ const TEAM=[
   {id:"paula", name:"Paula", dla:"Pauli",  init:"P", color:"var(--p-paula)",  f:true},
   {id:"kamil", name:"Kamil", dla:"Kamila", init:"K", color:"var(--p-kamil)",  f:false},
   {id:"michal",name:"Michał",dla:"Michała",init:"M", color:"var(--p-michal)", f:false},
-  {id:"malgorzata",name:"Gosia",dla:"Gosi",init:"G", color:"var(--p-malgorzata)",f:true},
+  {id:"malgorzata",name:"Gosia",dla:"Gosi",init:"G", color:"var(--p-malgorzata)",f:true,guest:true},
 ];
 const T=Object.fromEntries(TEAM.map(p=>[p.id,p]));
+// guests view the board, add tasks and comment; no points, no odprawa, no closing/moving/deleting
+const SCORED=TEAM.filter(p=>!p.guest);
+const isGuest=()=>!!(me&&T[me].guest);
 const SECTIONS=[
   {k:"pilne",   label:"Pilne",   hint:"Na dziś, po terminie, awarie",     tone:"var(--t-pilne)"},
   {k:"wazne",   label:"Ważne",   hint:"Wpływ na obiekt, ale się nie pali", tone:"var(--t-wazne)"},
@@ -109,7 +112,7 @@ function cmp(a,b){
 
 /* scoring — always derived from the records, never stored.
    meta/points holds per-person reset times: records before a person's reset don't count for them */
-const counts=(w,at)=>!!T[w]&&!(resets[w]&&at<resets[w]);
+const counts=(w,at)=>!!T[w]&&!T[w].guest&&!(resets[w]&&at<resets[w]);
 function stats(){
   const ws=weekStart(), s={};
   TEAM.forEach(p=>s[p.id]={week:0,total:0,doneWeek:0,ontime:0,notes:0,comments:0,odprawy:0});
@@ -142,9 +145,9 @@ function renderMe(){
 }
 function renderBoard(){
   const s=stats(), box=$("#scores"); box.replaceChildren();
-  const maxW=Math.max(...TEAM.map(p=>s[p.id].week));
-  const leaders=TEAM.filter(p=>s[p.id].week===maxW);
-  for(const p of TEAM){
+  const maxW=Math.max(...SCORED.map(p=>s[p.id].week));
+  const leaders=SCORED.filter(p=>s[p.id].week===maxW);
+  for(const p of SCORED){
     const x=s[p.id], lv=level(x.total);
     box.append(h("button",{class:"score"+(p.id===me?" is-me":""),type:"button","aria-expanded":String(showDetails),title:"Ranking i odznaki",onclick:toggleDetails},
       av(p.id),
@@ -156,7 +159,7 @@ function renderBoard(){
   }
   const d=$("#details"); d.hidden=!showDetails; d.replaceChildren();
   if(showDetails){
-    const ranked=[...TEAM].sort((a,b)=>s[b.id].total-s[a.id].total);
+    const ranked=[...SCORED].sort((a,b)=>s[b.id].total-s[a.id].total);
     for(const p of ranked){
       const x=s[p.id], lv=level(x.total);
       d.append(h("div",{class:"rank-row"},
@@ -178,6 +181,7 @@ function toggleDetails(){showDetails=!showDetails;renderBoard();}
 const odprawyToday=pid=>odprawy.filter(o=>o.who===pid&&counts(pid,o.at)&&ymd(new Date(o.at))===todayStr());
 const odprawaToday=pid=>odprawyToday(pid).length>0;
 function renderRotation(){
+  $(".rot").hidden=isGuest();
   const p=me?T[me]:null;
   $("#rot-who").replaceChildren(...(p?[av(me),p.name]:["Wybierz siebie"]));
   const mine=p?odprawy.filter(o=>o.who===me&&counts(me,o.at)).length:0;
@@ -264,7 +268,7 @@ function card(t,cs,sec){
     F[t.firm]?h("span",{class:"firm-tag",title:"Dla: "+F[t.firm].name},F[t.firm].name):null
   );
   const row=h("div",{class:"row"},
-    isTask?h("button",{class:"tick-box"+(t.done?" on":""),type:"button",disabled:!canWrite,"aria-label":t.done?"Otwórz zadanie ponownie":"Oznacz jako zrobione",onclick:()=>toggleDone(t),html:ICON.check}):h("span",{class:"note-mark"},"Not."),
+    isTask?h("button",{class:"tick-box"+(t.done?" on":""),type:"button",disabled:!canWrite||isGuest(),"aria-label":t.done?"Otwórz zadanie ponownie":"Oznacz jako zrobione",onclick:()=>toggleDone(t),html:ICON.check}):h("span",{class:"note-mark"},"Not."),
     h("button",{class:"text-btn",type:"button",id:"tb-"+t.id,"aria-expanded":String(isOpen),onclick:()=>{toggle(openCards,t.id);renderCols();}},h("span",{class:"tx"},t.text)),
     meta);
   const kids=[row];
@@ -276,7 +280,10 @@ function card(t,cs,sec){
       F[t.firm]?" · dla "+F[t.firm].name:"",
       overdue?" · po terminie":"",
       (isTask&&t.done&&T[t.doneBy])?h("span",{class:"ok"}," · "+(T[t.doneBy].f?"zamknęła ":"zamknął ")+T[t.doneBy].name+" "+shortDay(t.doneAt)):null));
-    if(canWrite){
+    if(canWrite&&isGuest()){
+      ext.append(h("div",{class:"acts"},
+        h("button",{class:"act",type:"button","aria-expanded":String(openThreads.has(t.id)),onclick:()=>{toggle(openThreads,t.id);renderCols();focusLater("cm-"+t.id);}},ic("chat"),cs.length?"Komentarz · "+cs.length:"Komentarz")));
+    } else if(canWrite){
       ext.append(h("div",{class:"move"},"Kolumna",
         h("div",{class:"seg",role:"group","aria-label":"Przenieś do kolumny"},
           SECTIONS.map(s=>h("button",{type:"button","aria-pressed":String(s.k===sec.k),style:"--tone:"+s.tone,onclick:()=>{if(s.k!==sec.k)setPrio(t,s.k);}},s.label)))));
@@ -312,7 +319,7 @@ function card(t,cs,sec){
     }
     kids.push(ext);
   }
-  const el=h("article",{class:"card "+t.kind+(t.done?" done":"")+(isOpen?" open":"")+(F[t.firm]?" firm-"+t.firm:""),role:"listitem","data-id":t.id,draggable:canWrite&&connected?"true":null},kids);
+  const el=h("article",{class:"card "+t.kind+(t.done?" done":"")+(isOpen?" open":"")+(F[t.firm]?" firm-"+t.firm:""),role:"listitem","data-id":t.id,draggable:canWrite&&connected&&!isGuest()?"true":null},kids);
   el.addEventListener("dragstart",e=>{
     if(e.target.closest&&e.target.closest("input,form")){e.preventDefault();return;}
     dragId=t.id; try{e.dataTransfer.setData("text/plain",t.id);e.dataTransfer.effectAllowed="move";}catch(_){}
@@ -335,7 +342,7 @@ function renderAll(){renderView();renderMe();renderBoard();renderRotation();rend
 /* feedback */
 let toastTimer=null;
 function toast(msg,pts){
-  const el=$("#toast"); el.replaceChildren(...(pts&&!present?[h("span",{class:"pts"},pts+" ")]:[]),msg);
+  const el=$("#toast"); el.replaceChildren(...(pts&&!present&&!isGuest()?[h("span",{class:"pts"},pts+" ")]:[]),msg);
   el.classList.add("show"); clearTimeout(toastTimer); toastTimer=setTimeout(()=>el.classList.remove("show"),2600);
 }
 function banner(msg,info){const b=$("#banner");b.textContent=msg||"";b.hidden=!msg;b.classList.toggle("info",!!info);}
@@ -390,6 +397,7 @@ async function addItem(){
   else ta.value=text;
 }
 async function setFirm(t,f){
+  if(isGuest()) return;
   if(needMe()||busy.has(t.id)) return;
   busy.add(t.id);
   const ok=await write(()=>db.doc("tasks/"+t.id).update({firm:f||null}));
@@ -397,6 +405,7 @@ async function setFirm(t,f){
   if(ok) toast(f?"Dla: "+F[f].name:"Bez firmy");
 }
 async function setPrio(t,p){
+  if(isGuest()) return;
   if(needMe()||busy.has(t.id)||!SEC[p]) return;
   busy.add(t.id);
   const ok=await write(()=>db.doc("tasks/"+t.id).update({prio:p}));
@@ -404,6 +413,7 @@ async function setPrio(t,p){
   if(ok) toast("Przeniesione do: "+SEC[p].label);
 }
 async function toggleDone(t){
+  if(isGuest()) return;
   if(needMe()||busy.has(t.id)) return;
   busy.add(t.id);
   const nowDone=!t.done;
@@ -418,6 +428,7 @@ async function toggleDone(t){
   } else toast("Zadanie znów otwarte");
 }
 async function setDue(t,val){
+  if(isGuest()) return;
   if(needMe()||busy.has(t.id)) return;
   if(!dueOk(val)){toast("Sprawdź datę: rok "+DUE_MIN.slice(0,4)+"–"+DUE_MAX.slice(0,4));focusLater("due-"+t.id);return;}
   busy.add(t.id);
@@ -437,6 +448,7 @@ async function addComment(t,val){
   if(ok){toast(T[me].name+" · komentarz","+"+PTS.comment+" pkt");focusLater("cm-"+t.id);} else drafts[t.id]=text;
 }
 async function removeItem(t){
+  if(isGuest()) return;
   confirmDel.delete(t.id);
   const ok=await write(()=>db.doc("tasks/"+t.id).delete());
   if(!ok) return;
@@ -445,6 +457,7 @@ async function removeItem(t){
   toast("Wpis usunięty");
 }
 async function logOdprawa(){
+  if(isGuest()) return;
   if(needMe()) return;
   if(!confirmOdp){confirmOdp=true;renderRotation();clearTimeout(odpTimer);odpTimer=setTimeout(()=>{confirmOdp=false;renderRotation();},5000);return;}
   confirmOdp=false; clearTimeout(odpTimer);
@@ -520,7 +533,7 @@ $("#pw-form").addEventListener("submit",async e=>{
   btn.disabled=false;
 });
 function renderResetBtn(){
-  const b=$("#reset-btn"); b.hidden=!me||!connected||!canWrite;
+  const b=$("#reset-btn"); b.hidden=!me||!connected||!canWrite||isGuest();
   b.textContent=confirmReset?"Na pewno? Kliknij jeszcze raz":"Wyzeruj moje punkty";
 }
 $("#reset-btn").addEventListener("click",async()=>{
