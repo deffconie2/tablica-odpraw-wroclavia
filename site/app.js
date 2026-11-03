@@ -4,6 +4,7 @@ const TEAM=[
   {id:"paula", name:"Paula", dla:"Pauli",  init:"P", color:"var(--p-paula)",  f:true},
   {id:"kamil", name:"Kamil", dla:"Kamila", init:"K", color:"var(--p-kamil)",  f:false},
   {id:"michal",name:"Michał",dla:"Michała",init:"M", color:"var(--p-michal)", f:false},
+  {id:"malgorzata",name:"Gosia",dla:"Gosi",init:"G", color:"var(--p-malgorzata)",f:true},
 ];
 const T=Object.fromEntries(TEAM.map(p=>[p.id,p]));
 const SECTIONS=[
