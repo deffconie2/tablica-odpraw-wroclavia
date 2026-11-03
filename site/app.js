@@ -623,7 +623,7 @@ function buildReport(which){
       !t.due?muted("—"):t.doneAt<=endOfDay(t.due)?cell("w terminie",{bg:"#e3f3e8",color:"#2c8a4f",bold:1})
         :cell("po terminie ("+dmy(t.due+"T12:00")+")",{bg:"#fbe3df",color:"#c3412f",bold:1}))));
   box.append(tbl(closedRows),gap());
-  const url=location.origin+location.pathname;
+  const url="https://tinyurl.com/tablica-odpraw"; // short link Michał set up for sharing
   box.append(h("p",{style:"margin:0;color:#5f6f6b"},"Tablica: ",h("a",{href:url,style:"color:#1f7a5a"},url)));
   return box;
 }
