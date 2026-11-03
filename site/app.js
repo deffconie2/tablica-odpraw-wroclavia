@@ -548,7 +548,6 @@ $("#reset-btn").addEventListener("click",async()=>{
 /* weekly report — only for REPORT_FOR; inline styles so it pastes cleanly into Outlook */
 const REPORT_FOR=["michal"];
 const canReport=()=>!!me&&REPORT_FOR.includes(me);
-const R_TONE={pilne:"#c3412f",wazne:"#b9770a",biezace:"#2b7f9e"};
 const R_FIRM={atalian:["#b45309","#fff3e6"],amlux:["#2563a8","#eaf2fc"],impel:["#23784a","#e8f6ed"],urw:["#c8102e","#fdeaec"]};
 let reportWeek="prev";
 function reportRange(which){
@@ -558,6 +557,9 @@ function reportRange(which){
 }
 const dmy=ts=>new Date(ts).toLocaleDateString("pl-PL",{day:"2-digit",month:"2-digit",year:"numeric"});
 const pname=id=>T[id]?T[id].name:"—";
+// Outlook drops text colors and sizes on paste, so meaning is carried by cell backgrounds,
+// bold and HTML width attributes (which it keeps), at a fixed e-mail width
+const R_BAND="#e4ebe7", R_TINT={pilne:"#fbe3df",wazne:"#fdf0d5",biezace:"#e1f0f5"}, RW=760;
 function buildReport(which){
   const [from,to]=reportRange(which), today=todayStr();
   const open=tasks.filter(isOpenTask).sort(cmp);
@@ -565,59 +567,64 @@ function buildReport(which){
   const odp=odprawy.filter(o=>o.at>=from&&o.at<to&&T[o.who]);
   const late=open.filter(t=>t.due&&t.due<today).length;
   const ontime=closed.filter(t=>t.due&&t.doneAt<=endOfDay(t.due)).length;
-  const S={
-    wrap:"font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#1b2624;line-height:1.4",
-    h1:"font-size:20px;margin:0 0 4px",sub:"color:#5f6f6b;margin:0 0 16px",
-    h2:"font-size:15px;margin:22px 0 8px",
-    table:"border-collapse:collapse;width:100%;margin:0 0 6px",
-    th:"text-align:left;font-size:12px;color:#5f6f6b;background:#f1f4f2;padding:6px 8px;border-bottom:1px solid #d1dad6",
-    td:"padding:6px 8px;border-bottom:1px solid #e3e8e5;vertical-align:top",
-    num:"padding:6px 8px;border-bottom:1px solid #e3e8e5;text-align:right;font-weight:bold",
-    muted:"color:#5f6f6b",late:"color:#c3412f;font-weight:bold",ok:"color:#2c8a4f;font-weight:bold",
-  };
-  const firmCell=f=>R_FIRM[f]?h("span",{style:`color:${R_FIRM[f][0]};background:${R_FIRM[f][1]};padding:1px 6px;border-radius:4px;font-weight:bold;font-size:12px`},F[f].name):h("span",{style:S.muted},"—");
-  // head: [label, width%, numeric?]; fixed widths keep the per-column tables aligned
-  const table=(head,rows)=>h("table",{style:S.table+";table-layout:fixed",cellpadding:"0",cellspacing:"0"},
-    head.length?h("thead",null,h("tr",null,head.map(([x,w,n])=>h("th",{style:S.th+(w?";width:"+w+"%":"")+(n?";text-align:right":"")},x)))):null,
-    h("tbody",null,rows));
-  const dueCell=t=>!t.due?h("span",{style:S.muted},"—")
-    :t.due<today?h("span",{style:S.late},dmy(t.due+"T12:00")+" · po terminie")
-    :t.due===today?h("b",null,"dziś"):dmy(t.due+"T12:00");
-  const box=h("div",{style:S.wrap});
-  box.append(h("h1",{style:S.h1},"Tablica odpraw — raport tygodniowy"),
-    h("p",{style:S.sub},(which==="prev"?"Poprzedni tydzień: ":"Ten tydzień: ")+dmy(from)+" – "+dmy(to-1)+" · wygenerowano "+dmy(Date.now())));
-  // summary
-  box.append(h("h2",{style:S.h2},"Podsumowanie"),
-    table([],[
-      h("tr",null,h("td",{style:S.td},"Otwarte zadania"),h("td",{style:S.num},String(open.length))),
-      h("tr",null,h("td",{style:S.td},"…w tym po terminie"),h("td",{style:S.num+(late?";color:#c3412f":"")},String(late))),
-      h("tr",null,h("td",{style:S.td},"Zamknięte w tym okresie"),h("td",{style:S.num},String(closed.length))),
-      h("tr",null,h("td",{style:S.td},"…w tym w terminie"),h("td",{style:S.num},String(ontime))),
-      h("tr",null,h("td",{style:S.td},"Odprawy"),h("td",{style:S.num},String(odp.length)+(odp.length?"  ("+SCORED.map(p=>p.name+" "+odp.filter(o=>o.who===p.id).length).join(", ")+")":""))),
-    ]));
-  const firms=[...FIRMS.map(f=>f.id),null].filter(f=>open.concat(closed).some(t=>(F[t.firm]?t.firm:null)===f));
-  if(firms.length) box.append(h("h2",{style:S.h2},"Według firm"),
-    table([["Firma",40],["Otwarte",20,1],["Po terminie",20,1],["Zamknięte",20,1]],firms.map(f=>{
-      const o=open.filter(t=>(F[t.firm]?t.firm:null)===f), c=closed.filter(t=>(F[t.firm]?t.firm:null)===f);
-      return h("tr",null,h("td",{style:S.td},f?firmCell(f):"Bez firmy"),h("td",{style:S.num},String(o.length)),
-        h("td",{style:S.num},String(o.filter(t=>t.due&&t.due<today).length)),h("td",{style:S.num},String(c.length)));
-    })));
-  // open tasks by column
-  box.append(h("h2",{style:S.h2},"Otwarte zadania ("+open.length+")"));
-  if(!open.length) box.append(h("p",{style:S.muted},"Brak otwartych zadań."));
+  const firmOf=t=>F[t.firm]?t.firm:null;
+  const tbl=rows=>h("table",{width:String(RW),cellpadding:"6",cellspacing:"0",border:"0",
+    style:`width:${RW}px;border-collapse:collapse;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#1b2624`},h("tbody",null,rows));
+  const cell=(content,o={})=>h(o.th?"th":"td",{
+    width:o.w?String(Math.round(RW*o.w/100)):null,bgcolor:o.bg||null,align:o.right?"right":"left",valign:"top",colspan:o.span?String(o.span):null,
+    style:"padding:6px 8px;border-bottom:1px solid #dfe5e2;vertical-align:top;text-align:"+(o.right?"right":"left")+";"
+      +(o.bg?"background:"+o.bg+";":"")+(o.bold||o.th?"font-weight:bold;":"")+(o.color?"color:"+o.color+";":"")
+      +(o.th?"font-size:12px;color:#5f6f6b;":"")+(o.size?"font-size:"+o.size+";":"")},content);
+  const head=cols=>h("tr",null,cols.map(([x,w,n])=>cell(x,{th:1,w,right:n,bg:"#f1f4f2"})));
+  const band=(text,bg,span,size)=>h("tr",null,cell(text,{bg,bold:1,span,size}));
+  const gap=()=>h("p",{style:"margin:0;font-size:10px;line-height:10px"}," ");
+  const muted=x=>cell(x,{color:"#5f6f6b"});
+  const firmTd=f=>f?cell(F[f].name,{bg:R_FIRM[f][1],color:R_FIRM[f][0],bold:1}):muted("—");
+  const dueTd=t=>!t.due?muted("—")
+    :t.due<today?cell(dmy(t.due+"T12:00")+" · po terminie",{bg:"#fbe3df",color:"#c3412f",bold:1})
+    :t.due===today?cell("dziś",{bg:"#fdecc8",bold:1}):cell(dmy(t.due+"T12:00"));
+  const box=h("div",{style:"font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#1b2624"});
+  box.append(tbl([
+    band("Tablica odpraw — raport tygodniowy",R_BAND,1,"18px"),
+    h("tr",null,muted((which==="prev"?"Poprzedni tydzień: ":"Ten tydzień: ")+dmy(from)+" – "+dmy(to-1)+" · wygenerowano "+dmy(Date.now()))),
+  ]),gap());
+  const sumRow=(label,val,bg)=>h("tr",null,cell(label,{w:70}),cell(val,{w:30,right:1,bold:1,bg}));
+  box.append(tbl([
+    band("Podsumowanie",R_BAND,2),
+    sumRow("Otwarte zadania",String(open.length)),
+    sumRow("…w tym po terminie",String(late),late?"#fbe3df":null),
+    sumRow("Zamknięte w tym okresie",String(closed.length)),
+    sumRow("…w tym w terminie",String(ontime)),
+    sumRow("Odprawy",String(odp.length)+(odp.length?"  ("+SCORED.map(p=>p.name+" "+odp.filter(o=>o.who===p.id).length).join(", ")+")":"")),
+  ]),gap());
+  const firms=[...FIRMS.map(f=>f.id),null].filter(f=>open.concat(closed).some(t=>firmOf(t)===f));
+  if(firms.length) box.append(tbl([
+    band("Według firm",R_BAND,4),
+    head([["Firma",40],["Otwarte",20,1],["Po terminie",20,1],["Zamknięte",20,1]]),
+    ...firms.map(f=>{
+      const o=open.filter(t=>firmOf(t)===f), c=closed.filter(t=>firmOf(t)===f), l=o.filter(t=>t.due&&t.due<today).length;
+      return h("tr",null,f?firmTd(f):cell("Bez firmy"),cell(String(o.length),{right:1,bold:1}),cell(String(l),{right:1,bold:1,bg:l?"#fbe3df":null}),cell(String(c.length),{right:1,bold:1}));
+    }),
+  ]),gap());
+  // open tasks: one table for all columns, so the widths line up between Pilne/Ważne/Bieżące
+  const openRows=[band("Otwarte zadania ("+open.length+")",R_BAND,4)];
+  if(!open.length) openRows.push(h("tr",null,muted("Brak otwartych zadań.")));
   for(const sct of SECTIONS){
     const list=open.filter(t=>prioOf(t)===sct.k); if(!list.length) continue;
-    box.append(h("p",{style:`margin:12px 0 4px;font-weight:bold;color:${R_TONE[sct.k]}`},sct.label+" ("+list.length+")"),
-      table([["Zadanie",52],["Firma",13],["Termin",22],["Dodał(a)",13]],list.map(t=>h("tr",null,
-        h("td",{style:S.td},t.text),h("td",{style:S.td},firmCell(t.firm)),h("td",{style:S.td},dueCell(t)),h("td",{style:S.td},pname(t.by))))));
+    openRows.push(band(sct.label+" ("+list.length+")",R_TINT[sct.k],4),
+      head([["Zadanie",52],["Firma",13],["Termin",22],["Dodał(a)",13]]),
+      ...list.map(t=>h("tr",null,cell(t.text),firmTd(firmOf(t)),dueTd(t),cell(pname(t.by)))));
   }
-  // closed in range
-  box.append(h("h2",{style:S.h2},"Zamknięte "+(which==="prev"?"w poprzednim tygodniu":"w tym tygodniu")+" ("+closed.length+")"));
-  if(!closed.length) box.append(h("p",{style:S.muted},"Nic nie zostało zamknięte w tym okresie."));
-  else box.append(table([["Zadanie",40],["Firma",13],["Zamknął(a)",13],["Kiedy",13],["Termin",21]],closed.map(t=>h("tr",null,
-    h("td",{style:S.td},t.text),h("td",{style:S.td},firmCell(t.firm)),h("td",{style:S.td},pname(t.doneBy)),h("td",{style:S.td},dmy(t.doneAt)),
-    h("td",{style:S.td},!t.due?h("span",{style:S.muted},"—"):t.doneAt<=endOfDay(t.due)?h("span",{style:S.ok},"w terminie"):h("span",{style:S.late},"po terminie ("+dmy(t.due+"T12:00")+")"))))));
-  box.append(h("p",{style:S.sub+";margin-top:22px"},"Tablica: ",h("a",{href:location.origin+location.pathname,style:"color:#1f7a5a"},location.origin+location.pathname)));
+  box.append(tbl(openRows),gap());
+  const closedRows=[band("Zamknięte "+(which==="prev"?"w poprzednim tygodniu":"w tym tygodniu")+" ("+closed.length+")",R_BAND,5)];
+  if(!closed.length) closedRows.push(h("tr",null,muted("Nic nie zostało zamknięte w tym okresie.")));
+  else closedRows.push(head([["Zadanie",40],["Firma",13],["Zamknął(a)",13],["Kiedy",13],["Termin",21]]),
+    ...closed.map(t=>h("tr",null,cell(t.text),firmTd(firmOf(t)),cell(pname(t.doneBy)),cell(dmy(t.doneAt)),
+      !t.due?muted("—"):t.doneAt<=endOfDay(t.due)?cell("w terminie",{bg:"#e3f3e8",color:"#2c8a4f",bold:1})
+        :cell("po terminie ("+dmy(t.due+"T12:00")+")",{bg:"#fbe3df",color:"#c3412f",bold:1}))));
+  box.append(tbl(closedRows),gap());
+  const url=location.origin+location.pathname;
+  box.append(h("p",{style:"margin:0;color:#5f6f6b"},"Tablica: ",h("a",{href:url,style:"color:#1f7a5a"},url)));
   return box;
 }
 function openReport(){
@@ -629,7 +636,8 @@ function openReport(){
 async function copyReport(){
   const el=$("#report-body"), done=()=>toast("Skopiowano — wklej w mailu (Ctrl+V)");
   try{
-    await navigator.clipboard.write([new ClipboardItem({"text/html":new Blob([el.innerHTML],{type:"text/html"}),"text/plain":new Blob([el.innerText],{type:"text/plain"})})]);
+    const html='<html><head><meta charset="utf-8"></head><body>'+el.innerHTML+'</body></html>';
+    await navigator.clipboard.write([new ClipboardItem({"text/html":new Blob([html],{type:"text/html"}),"text/plain":new Blob([el.innerText],{type:"text/plain"})})]);
     done();
   }catch(e){ // older browsers: copy the rendered selection instead
     const r=document.createRange(); r.selectNodeContents(el); const sel=getSelection(); sel.removeAllRanges(); sel.addRange(r);
