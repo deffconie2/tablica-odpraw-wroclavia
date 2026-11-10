@@ -90,7 +90,7 @@ let showDone=load("showDone")==="1";
 let present=load("present")==="1";
 let q="";
 let kind="task", showDetails=false, confirmOdp=false, odpTimer=null, dragId=null;
-const openCards=new Set(), openThreads=new Set(), openDue=new Set(), confirmDel=new Set(), busy=new Set();
+const openCards=new Set(), openThreads=new Set(), openDue=new Set(), confirmDel=new Set(), confirmDelC=new Set(), busy=new Set();
 const drafts={};
 const startSec=load("sec"); if(SEC[startSec]) $("#c-sec").value=startSec; else $("#c-sec").value="biezace";
 
@@ -311,7 +311,13 @@ function card(t,cs,sec){
     }
     if(cs.length||openThreads.has(t.id)){
       const th=h("div",{class:"thread"});
-      for(const c of cs) th.append(h("div",{class:"cmt"},h("b",{style:"--c:"+(T[c.by]?T[c.by].color:"var(--muted)")},T[c.by]?T[c.by].name:"Ktoś")," ",c.text,h("time",null,shortDay(c.at))));
+      for(const c of cs){
+        // only the author can delete a comment; its point goes away with it
+        const del=canWrite&&c.by===me?(confirmDelC.has(c.id)
+          ?h("button",{class:"cmt-del sure",type:"button",onclick:()=>removeComment(c)},"Usunąć?")
+          :h("button",{class:"cmt-del",type:"button","aria-label":"Usuń komentarz",title:"Usuń komentarz",onclick:()=>{confirmDelC.add(c.id);renderCols();setTimeout(()=>{if(confirmDelC.delete(c.id))renderCols();},4000);}},"×")):null;
+        th.append(h("div",{class:"cmt"},h("b",{style:"--c:"+(T[c.by]?T[c.by].color:"var(--muted)")},T[c.by]?T[c.by].name:"Ktoś")," ",c.text,h("time",null,shortDay(c.at)),del));
+      }
       if(openThreads.has(t.id)&&canWrite){
         const inp=h("input",{id:"cm-"+t.id,type:"text",maxlength:"400",placeholder:"Napisz komentarz…","aria-label":"Komentarz",value:drafts[t.id]||"",oninput:e=>{drafts[t.id]=e.target.value;}});
         th.append(h("form",{class:"c-form",onsubmit:e=>{e.preventDefault();addComment(t,inp.value);}},inp,h("button",{type:"submit"},"Wyślij")));
@@ -447,6 +453,12 @@ async function addComment(t,val){
   drafts[t.id]="";
   const ok=await write(()=>ref.set({taskId:t.id,text:text.slice(0,400),by:me,at:Date.now()}));
   if(ok){toast(T[me].name+" · komentarz","+"+PTS.comment+" pkt");focusLater("cm-"+t.id);} else drafts[t.id]=text;
+}
+async function removeComment(c){
+  confirmDelC.delete(c.id);
+  if(c.by!==me) return;
+  const ok=await write(()=>db.doc("comments/"+c.id).delete());
+  if(ok) toast(T[me].name+" · komentarz usunięty",isGuest()?null:"−"+PTS.comment+" pkt");
 }
 async function removeItem(t){
   if(isGuest()) return;
