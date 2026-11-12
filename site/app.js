@@ -273,6 +273,9 @@ function card(t,cs,sec){
     h("button",{class:"text-btn",type:"button",id:"tb-"+t.id,"aria-expanded":String(isOpen),onclick:()=>{toggle(openCards,t.id);renderCols();}},h("span",{class:"tx"},t.text)),
     meta);
   const kids=[row];
+  // comments are visible without opening the card; the open card shows the full thread instead
+  if(!isOpen&&cs.length) kids.push(h("div",{class:"cmt-peek"},cs.map(c=>h("div",{class:"cmt"},
+    h("b",{style:"--c:"+(T[c.by]?T[c.by].color:"var(--muted)")},T[c.by]?T[c.by].name:"Ktoś")," ",c.text,h("time",null,shortDay(c.at))))));
   if(isOpen){
     const author=T[t.by];
     const ext=h("div",{class:"ext"});
