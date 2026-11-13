@@ -256,11 +256,20 @@ function renderCols(){
         (s.k==="pilne"?"Nic się nie pali. Zadanie z terminem na dziś trafia tu samo, jeśli nie ma kolumny.":"Pusto. Dodaj zadanie przyciskiem + albo przeciągnij je tutaj.")));
     }
     for(const t of items) list.append(card(t,byTask[t.id]||[],s));
+    fitPeeks(list);
     list.scrollTop=top;
   }
   if(actId){const el=document.getElementById(actId); if(el){el.focus({preventScroll:true}); if(sel) try{el.setSelectionRange(sel[0],sel[1])}catch(e){}}}
 }
 
+// when a column overflows, hide comment previews from the bottom card up until the cards fit
+function fitPeeks(list){
+  const peeks=[...list.querySelectorAll(".cmt-peek")];
+  peeks.forEach(p=>p.hidden=false);
+  for(let i=peeks.length-1;i>=0&&list.scrollHeight>list.clientHeight;i--) peeks[i].hidden=true;
+}
+let fitTimer=null;
+window.addEventListener("resize",()=>{clearTimeout(fitTimer);fitTimer=setTimeout(()=>document.querySelectorAll(".list").forEach(fitPeeks),150);});
 function card(t,cs,sec){
   const isTask=t.kind==="task", today=todayStr(), isOpen=openCards.has(t.id);
   const overdue=isTask&&!t.done&&t.due&&t.due<today, dueToday=isTask&&!t.done&&t.due===today;
