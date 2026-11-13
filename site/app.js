@@ -5,7 +5,7 @@ const TEAM=[
   {id:"kamil", name:"Kamil", dla:"Kamila", init:"K", color:"var(--p-kamil)",  f:false},
   {id:"michal",name:"Michał",dla:"Michała",init:"M", color:"var(--p-michal)", f:false},
   {id:"malgorzata",name:"Gosia",dla:"Gosi",init:"G", color:"var(--p-malgorzata)",f:true,guest:true},
-  {id:"karolina",name:"Karolina",dla:"Karoliny",init:"Ka",color:"var(--p-karolina)",f:true},
+  {id:"karolina",name:"Karolina",dla:"Karoliny",init:"Ka",color:"var(--p-karolina)",f:true,gold:true},
 ];
 const T=Object.fromEntries(TEAM.map(p=>[p.id,p]));
 // guests view the board, add tasks and comment; no points, no odprawa, no closing/moving/deleting
@@ -330,7 +330,7 @@ function card(t,cs,sec){
     }
     kids.push(ext);
   }
-  const el=h("article",{class:"card "+t.kind+(t.done?" done":"")+(isOpen?" open":"")+(F[t.firm]?" firm-"+t.firm:""),role:"listitem","data-id":t.id,draggable:canWrite&&connected&&!isGuest()?"true":null},kids);
+  const el=h("article",{class:"card "+t.kind+(t.done?" done":"")+(isOpen?" open":"")+(F[t.firm]?" firm-"+t.firm:"")+(T[t.by]&&T[t.by].gold?" by-gold":""),role:"listitem","data-id":t.id,draggable:canWrite&&connected&&!isGuest()?"true":null},kids);
   el.addEventListener("dragstart",e=>{
     if(e.target.closest&&e.target.closest("input,form")){e.preventDefault();return;}
     dragId=t.id; try{e.dataTransfer.setData("text/plain",t.id);e.dataTransfer.effectAllowed="move";}catch(_){}
