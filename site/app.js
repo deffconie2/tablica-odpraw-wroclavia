@@ -5,6 +5,7 @@ const TEAM=[
   {id:"kamil", name:"Kamil", dla:"Kamila", init:"K", color:"var(--p-kamil)",  f:false},
   {id:"michal",name:"Michał",dla:"Michała",init:"M", color:"var(--p-michal)", f:false},
   {id:"malgorzata",name:"Gosia",dla:"Gosi",init:"G", color:"var(--p-malgorzata)",f:true,guest:true},
+  {id:"karolina",name:"Karolina",dla:"Karoliny",init:"Ka",color:"var(--p-karolina)",f:true},
 ];
 const T=Object.fromEntries(TEAM.map(p=>[p.id,p]));
 // guests view the board, add tasks and comment; no points, no odprawa, no closing/moving/deleting
