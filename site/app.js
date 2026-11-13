@@ -34,6 +34,7 @@ const ICON={
   check:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.2 4.2L19 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   chat:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>',
   cal:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5.5" width="16" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+  pencil:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 19.5l1-4L16 5l3 3L8.5 18.5z M14 7l3 3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg>',
   trash:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M10 7V4.5h4V7M7 7l1 12.5h8L17 7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg>',
   doc:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 3.5h8l4 4v13h-12z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M14.5 3.5v4h4M9 12h6M9 15.5h6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
   eye:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>',
@@ -91,7 +92,8 @@ let showDone=load("showDone")==="1";
 let present=load("present")==="1";
 let q="";
 let kind="task", showDetails=false, confirmOdp=false, odpTimer=null, dragId=null;
-const openCards=new Set(), openThreads=new Set(), openDue=new Set(), confirmDel=new Set(), confirmDelC=new Set(), busy=new Set();
+const openCards=new Set(), openThreads=new Set(), openDue=new Set(), confirmDel=new Set(), confirmDelC=new Set(), openEdit=new Set(), busy=new Set();
+const editDrafts={};
 const drafts={};
 const startSec=load("sec"); if(SEC[startSec]) $("#c-sec").value=startSec; else $("#c-sec").value="biezace";
 
@@ -293,10 +295,24 @@ function card(t,cs,sec){
       (author?(author.f?"Dodała ":"Dodał ")+author.name:"Dodane")+" · "+shortDay(t.createdAt),
       F[t.firm]?" · dla "+F[t.firm].name:"",
       overdue?" · po terminie":"",
+      (t.editedAt&&T[t.editedBy])?" · edytowane ("+T[t.editedBy].name+", "+shortDay(t.editedAt)+")":"",
       (isTask&&t.done&&T[t.doneBy])?h("span",{class:"ok"}," · "+(T[t.doneBy].f?"zamknęła ":"zamknął ")+T[t.doneBy].name+" "+shortDay(t.doneAt)):null));
+    if(openEdit.has(t.id)&&canWrite&&(!isGuest()||t.by===me)){
+      const ta=h("textarea",{id:"ed-"+t.id,class:"edit-ta",maxlength:"600",rows:"3","aria-label":"Treść zadania",
+        oninput:e=>{editDrafts[t.id]=e.target.value;},
+        onkeydown:e=>{if(e.key==="Enter"&&(e.ctrlKey||e.metaKey)){e.preventDefault();setText(t,ta.value);} else if(e.key==="Escape"){e.stopPropagation();openEdit.delete(t.id);delete editDrafts[t.id];renderCols();}}});
+      ta.value=editDrafts[t.id]!=null?editDrafts[t.id]:t.text;
+      ext.append(h("div",{class:"edit-form"},ta,h("div",{class:"acts"},
+        h("button",{class:"act primary",type:"button",onclick:()=>setText(t,ta.value)},"Zapisz"),
+        h("button",{class:"act",type:"button",onclick:()=>{openEdit.delete(t.id);delete editDrafts[t.id];renderCols();}},"Anuluj"),
+        h("span",{class:"info"},"Ctrl+Enter zapisuje, Esc anuluje"))));
+    }
+    // edit text: the team can edit any entry, a guest only their own
+    const editBtn=()=>h("button",{class:"act",type:"button","aria-expanded":String(openEdit.has(t.id)),onclick:()=>{if(openEdit.has(t.id)){openEdit.delete(t.id);delete editDrafts[t.id];}else openEdit.add(t.id);renderCols();focusLater("ed-"+t.id);}},ic("pencil"),"Edytuj");
     if(canWrite&&isGuest()){
       ext.append(h("div",{class:"acts"},
-        h("button",{class:"act",type:"button","aria-expanded":String(openThreads.has(t.id)),onclick:()=>{toggle(openThreads,t.id);renderCols();focusLater("cm-"+t.id);}},ic("chat"),cs.length?"Komentarz · "+cs.length:"Komentarz")));
+        h("button",{class:"act",type:"button","aria-expanded":String(openThreads.has(t.id)),onclick:()=>{toggle(openThreads,t.id);renderCols();focusLater("cm-"+t.id);}},ic("chat"),cs.length?"Komentarz · "+cs.length:"Komentarz"),
+        t.by===me?editBtn():null));
     } else if(canWrite){
       ext.append(h("div",{class:"move"},"Kolumna",
         h("div",{class:"seg",role:"group","aria-label":"Przenieś do kolumny"},
@@ -307,6 +323,7 @@ function card(t,cs,sec){
       ext.append(h("div",{class:"acts"},
         isTask?h("button",{class:"act"+(t.done?"":" primary"),type:"button",onclick:()=>toggleDone(t)},ic("check"),t.done?"Otwórz":"Zrobione"):null,
         h("button",{class:"act",type:"button","aria-expanded":String(openThreads.has(t.id)),onclick:()=>{toggle(openThreads,t.id);renderCols();focusLater("cm-"+t.id);}},ic("chat"),cs.length?"Komentarz · "+cs.length:"Komentarz"),
+        editBtn(),
         h("button",{class:"act",type:"button","aria-expanded":String(openDue.has(t.id)),onclick:()=>{toggle(openDue,t.id);renderCols();focusLater("due-"+t.id);}},ic("cal"),t.due?"Termin":"Dodaj termin"),
         confirmDel.has(t.id)
           ?h("button",{class:"act danger",type:"button",onclick:()=>removeItem(t)},"Na pewno usunąć?")
@@ -415,6 +432,17 @@ async function addItem(){
   const ok=await write(()=>ref.set(doc));
   if(ok) toast(T[me].name+" · "+(kind==="task"?"dodane do: ":"notatka w: ")+SEC[prio].label,"+"+(PTS.add+(dueCounts?PTS.due:0))+" pkt");
   else ta.value=text;
+}
+async function setText(t,val){
+  if(needMe()||busy.has(t.id)) return;
+  if(isGuest()&&t.by!==me) return;
+  const text=(val||"").trim().slice(0,600);
+  if(!text){toast("Treść nie może być pusta.");return;}
+  if(text===t.text){openEdit.delete(t.id);delete editDrafts[t.id];renderCols();return;}
+  busy.add(t.id);
+  const ok=await write(()=>db.doc("tasks/"+t.id).update({text,editedBy:me,editedAt:Date.now()}));
+  busy.delete(t.id);
+  if(ok){openEdit.delete(t.id);delete editDrafts[t.id];renderCols();toast("Zapisano zmianę treści");}
 }
 async function setFirm(t,f){
   if(isGuest()) return;
