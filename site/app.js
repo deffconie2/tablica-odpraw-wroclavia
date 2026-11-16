@@ -5,7 +5,7 @@ const TEAM=[
   {id:"kamil", name:"Kamil", dla:"Kamila", init:"K", color:"var(--p-kamil)",  f:false},
   {id:"michal",name:"Michał",dla:"Michała",init:"M", color:"var(--p-michal)", f:false},
   {id:"malgorzata",name:"Gosia",dla:"Gosi",init:"G", color:"var(--p-malgorzata)",f:true,guest:true},
-  {id:"karolina",name:"Karolina",dla:"Karoliny",init:"Ka",color:"var(--p-karolina)",f:true,gold:true},
+  {id:"karolina",name:"Karolina",dla:"Karoliny",init:"Ka",color:"var(--p-karolina)",f:true,gold:true,odprawaPts:3}, // Karolina is at every daily odprawa, so fewer points per one
 ];
 const T=Object.fromEntries(TEAM.map(p=>[p.id,p]));
 // guests view the board, add tasks and comment; no points, no odprawa, no closing/moving/deleting
@@ -116,6 +116,7 @@ function cmp(a,b){
 
 /* scoring — always derived from the records, never stored.
    meta/points holds per-person reset times: records before a person's reset don't count for them */
+const odprawaPts=w=>T[w]&&T[w].odprawaPts!=null?T[w].odprawaPts:PTS.odprawa;
 const counts=(w,at)=>!!T[w]&&!T[w].guest&&!(resets[w]&&at<resets[w]);
 function stats(){
   const ws=weekStart(), s={};
@@ -132,7 +133,7 @@ function stats(){
     }
   }
   for(const c of comments){ if(ids.has(c.taskId)&&add(c.by,PTS.comment,c.at)) s[c.by].comments++; }
-  for(const o of odprawy){ if(add(o.who,PTS.odprawa,o.at)) s[o.who].odprawy++; }
+  for(const o of odprawy){ if(add(o.who,odprawaPts(o.who),o.at)) s[o.who].odprawy++; }
   return s;
 }
 function level(total){
@@ -174,7 +175,7 @@ function renderBoard(){
       ));
     }
     d.append(h("p",{class:"legend"},
-      h("b",null,"Punkty: "),"odprawa +"+PTS.odprawa+" · zamknięte zadanie +"+PTS.done+" · w terminie +"+PTS.ontime+" bonusu · wpis +"+PTS.add+" · dodanie terminu +"+PTS.due+" · komentarz +"+PTS.comment+". ",
+      h("b",null,"Punkty: "),"odprawa +"+PTS.odprawa+TEAM.filter(p=>p.odprawaPts!=null).map(p=>" ("+p.name+" +"+p.odprawaPts+")").join("")+" · zamknięte zadanie +"+PTS.done+" · w terminie +"+PTS.ontime+" bonusu · wpis +"+PTS.add+" · dodanie terminu +"+PTS.due+" · komentarz +"+PTS.comment+". ",
       "Punkty liczą się z wpisów, więc otwarcie zadania ponownie je odejmuje. Odznaki opisuje podpowiedź po najechaniu."));
   }
 }
@@ -524,7 +525,7 @@ async function logOdprawa(){
   const ref=db.collection("odprawy").doc();
   const ok=await write(()=>ref.set({who:me,by:me,at:Date.now()}));
   if(!ok){renderRotation();return;}
-  toast(T[me].name+" · odprawa zaliczona","+"+PTS.odprawa+" pkt");
+  toast(T[me].name+" · odprawa zaliczona","+"+odprawaPts(me)+" pkt");
   confetti();
 }
 
