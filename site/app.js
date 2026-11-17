@@ -229,7 +229,7 @@ function buildCols(){
       const id=dragId||e.dataTransfer.getData("text/plain"); dragId=null;
       const t=tasks.find(x=>x.id===id); if(t&&prioOf(t)!==s.k) setPrio(t,s.k);
     });
-    box.append(h("section",{class:"col",style:"--tone:"+s.tone,"aria-labelledby":"h-"+s.k},
+    box.append(h("section",{class:"col",id:"col-"+s.k,style:"--tone:"+s.tone,"aria-labelledby":"h-"+s.k},
       h("div",{class:"col-head"},
         h("div",null,h("h2",{id:"h-"+s.k},s.label),h("p",null,s.hint)),
         h("span",{class:"cnt",id:"cnt-"+s.k,title:"Otwarte zadania"},"0"),
@@ -262,6 +262,7 @@ function renderCols(){
     fitPeeks(list);
     list.scrollTop=top;
   }
+  renderTabs();
   if(actId){const el=document.getElementById(actId); if(el){el.focus({preventScroll:true}); if(sel) try{el.setSelectionRange(sel[0],sel[1])}catch(e){}}}
 }
 
@@ -372,6 +373,7 @@ function focusLater(id){requestAnimationFrame(()=>{const el=document.getElementB
 function renderComposer(){
   const off=!connected||!canWrite;
   ["#c-text","#c-to","#c-due","#c-sec","#c-send"].forEach(s=>$(s).disabled=off);
+  $("#fab").hidden=off;
   document.querySelectorAll(".composer .seg button").forEach(b=>{b.disabled=off;b.setAttribute("aria-pressed",String(b.dataset.kind===kind));});
   $("#c-text").placeholder=off?(connected?"Masz podgląd bez prawa edycji":"Łączę z tablicą…"):(kind==="task"?"Nowe zadanie z odprawy…":"Notatka z odprawy…");
 }
@@ -431,6 +433,7 @@ async function addItem(){
   ta.value=""; $("#c-due").value=""; $("#c-to").value=DEFAULT_FIRM;
   if(!visible({...doc,id:ref.id})){who="all";save("person","all");q="";$("#q").value="";renderFilters();}
   const ok=await write(()=>ref.set(doc));
+  if(ok){closeCompose();mobTab=prio;save("tab",prio);renderTabs();}
   if(ok) toast(T[me].name+" · "+(kind==="task"?"dodane do: ":"notatka w: ")+SEC[prio].label,"+"+(PTS.add+(dueCounts?PTS.due:0))+" pkt");
   else ta.value=text;
 }
@@ -708,6 +711,28 @@ $("#report-print").addEventListener("click",()=>window.print());
 document.querySelectorAll("#report .seg button").forEach(b=>b.addEventListener("click",()=>{reportWeek=b.dataset.w;openReport();}));
 
 /* view mode */
+/* phone: column tabs and the add-form sheet (both hidden by CSS on wider screens) */
+let mobTab=SEC[load("tab")]?load("tab"):"pilne";
+function renderTabs(){
+  const box=$("#col-tabs"); box.replaceChildren();
+  for(const s of SECTIONS){
+    const n=$("#cnt-"+s.k)?$("#cnt-"+s.k).textContent:"0";
+    box.append(h("button",{class:"col-tab"+(s.k==="pilne"&&n!=="0"?" hot":""),type:"button",role:"tab","aria-selected":String(s.k===mobTab),style:"--tone:"+s.tone,
+      onclick:()=>{mobTab=s.k;save("tab",s.k);renderTabs();}},s.label,h("b",null,n)));
+    const col=$("#col-"+s.k); if(col) col.classList.toggle("active",s.k===mobTab);
+  }
+}
+function openCompose(){
+  if(needMe()) return;
+  $("#c-sec").value=mobTab;
+  document.body.classList.add("compose-open");
+  setTimeout(()=>$("#c-text").focus(),60);
+}
+function closeCompose(){document.body.classList.remove("compose-open");}
+$("#fab").addEventListener("click",openCompose);
+$("#compose-bg").addEventListener("click",closeCompose);
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&document.body.classList.contains("compose-open"))closeCompose();});
+
 function renderView(){
   document.body.classList.toggle("present",present);
   const rb=$("#report-btn"); rb.hidden=!canReport(); rb.replaceChildren(ic("doc"),"Raport");
