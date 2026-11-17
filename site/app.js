@@ -433,7 +433,7 @@ async function addItem(){
   ta.value=""; $("#c-due").value=""; $("#c-to").value=DEFAULT_FIRM;
   if(!visible({...doc,id:ref.id})){who="all";save("person","all");q="";$("#q").value="";renderFilters();}
   const ok=await write(()=>ref.set(doc));
-  if(ok){closeCompose();mobTab=prio;save("tab",prio);renderTabs();}
+  if(ok){closeCompose();mobTab=prio;renderTabs();}
   if(ok) toast(T[me].name+" · "+(kind==="task"?"dodane do: ":"notatka w: ")+SEC[prio].label,"+"+(PTS.add+(dueCounts?PTS.due:0))+" pkt");
   else ta.value=text;
 }
@@ -712,13 +712,18 @@ document.querySelectorAll("#report .seg button").forEach(b=>b.addEventListener("
 
 /* view mode */
 /* phone: column tabs and the add-form sheet (both hidden by CSS on wider screens) */
-let mobTab=SEC[load("tab")]?load("tab"):"pilne";
+let mobTab="pilne", autoTab=false;
 function renderTabs(){
+  // on opening, start at the first tab with open tasks: Pilne, else Ważne, else Bieżące
+  if(!autoTab&&connected&&loaded.tasks){
+    autoTab=true;
+    mobTab=SECTIONS.map(s=>s.k).find(k=>$("#cnt-"+k)&&$("#cnt-"+k).textContent!=="0")||"pilne";
+  }
   const box=$("#col-tabs"); box.replaceChildren();
   for(const s of SECTIONS){
     const n=$("#cnt-"+s.k)?$("#cnt-"+s.k).textContent:"0";
     box.append(h("button",{class:"col-tab"+(s.k==="pilne"&&n!=="0"?" hot":""),type:"button",role:"tab","aria-selected":String(s.k===mobTab),style:"--tone:"+s.tone,
-      onclick:()=>{mobTab=s.k;save("tab",s.k);renderTabs();}},s.label,h("b",null,n)));
+      onclick:()=>{mobTab=s.k;renderTabs();}},s.label,h("b",null,n)));
     const col=$("#col-"+s.k); if(col) col.classList.toggle("active",s.k===mobTab);
   }
 }
