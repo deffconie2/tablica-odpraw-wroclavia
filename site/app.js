@@ -5,7 +5,7 @@ const TEAM=[
   {id:"kamil", name:"Kamil", dla:"Kamila", init:"K", color:"var(--p-kamil)",  f:false},
   {id:"michal",name:"Michał",dla:"Michała",init:"M", color:"var(--p-michal)", f:false},
   {id:"malgorzata",name:"Gosia",dla:"Gosi",init:"G", color:"var(--p-malgorzata)",f:true,guest:true},
-  {id:"karolina",name:"Karolina",dla:"Karoliny",init:"Ka",color:"var(--p-karolina)",f:true,gold:true,odprawaPts:3}, // Karolina is at every daily odprawa, so fewer points per one
+  {id:"karolina",name:"Karolina",dla:"Karoliny",init:"Ka",color:"var(--p-karolina)",f:true,gold:true,ptsFactor:1/3}, // Karolina earns a third of every point (she is at every daily odprawa)
 ];
 const T=Object.fromEntries(TEAM.map(p=>[p.id,p]));
 // guests view the board, add tasks and comment; no points, no odprawa, no closing/moving/deleting
@@ -116,12 +116,15 @@ function cmp(a,b){
 
 /* scoring — always derived from the records, never stored.
    meta/points holds per-person reset times: records before a person's reset don't count for them */
-const odprawaPts=w=>T[w]&&T[w].odprawaPts!=null?T[w].odprawaPts:PTS.odprawa;
+const factor=w=>T[w]&&T[w].ptsFactor!=null?T[w].ptsFactor:1;
+// whole numbers stay whole; a person with a factor gets one decimal, e.g. "1,7"
+const fmtPts=n=>{const r=Math.round(n*10)/10;return Number.isInteger(r)?String(r):r.toFixed(1).replace(".",",");};
+const myPts=n=>"+"+fmtPts(n*factor(me))+" pkt";
 const counts=(w,at)=>!!T[w]&&!T[w].guest&&!(resets[w]&&at<resets[w]);
 function stats(){
   const ws=weekStart(), s={};
   TEAM.forEach(p=>s[p.id]={week:0,total:0,doneWeek:0,ontime:0,notes:0,comments:0,odprawy:0});
-  const add=(w,pts,at)=>{if(!counts(w,at))return false;s[w].total+=pts;if(at>=ws)s[w].week+=pts;return true;};
+  const add=(w,pts,at)=>{if(!counts(w,at))return false;pts*=factor(w);s[w].total+=pts;if(at>=ws)s[w].week+=pts;return true;};
   const ids=new Set(tasks.map(t=>t.id));
   for(const t of tasks){
     if(add(t.by,PTS.add,t.createdAt)&&t.kind==="note") s[t.by].notes++;
@@ -133,7 +136,7 @@ function stats(){
     }
   }
   for(const c of comments){ if(ids.has(c.taskId)&&add(c.by,PTS.comment,c.at)) s[c.by].comments++; }
-  for(const o of odprawy){ if(add(o.who,odprawaPts(o.who),o.at)) s[o.who].odprawy++; }
+  for(const o of odprawy){ if(add(o.who,PTS.odprawa,o.at)) s[o.who].odprawy++; }
   return s;
 }
 function level(total){
@@ -157,9 +160,9 @@ function renderBoard(){
     box.append(h("button",{class:"score"+(p.id===me?" is-me":""),type:"button","aria-expanded":String(showDetails),title:"Ranking i odznaki",onclick:toggleDetails},
       av(p.id),
       // big number is the running total; the weekly gain (resets every Monday) sits beside the level bar
-      h("span",{class:"score-l1"},h("span",null,p.name+(p.id===me?" · ty":"")),h("b",{title:"Punkty łącznie"},String(x.total)),
+      h("span",{class:"score-l1"},h("span",null,p.name+(p.id===me?" · ty":"")),h("b",{title:"Punkty łącznie"},String(Math.round(x.total))),
         (maxW>0&&leaders.length===1&&leaders[0].id===p.id)?h("span",{class:"tag",title:"Najwięcej punktów w tym tygodniu"},"MVP tyg."):null),
-      h("span",{class:"score-l2"},"Lv "+lv.n,h("span",{class:"meter",role:"img","aria-label":"Postęp do następnego poziomu: "+Math.round(lv.pct*100)+"%"},h("i",{style:"width:"+Math.round(lv.pct*100)+"%"})),"+"+x.week+" w tym tyg.")
+      h("span",{class:"score-l2"},"Lv "+lv.n,h("span",{class:"meter",role:"img","aria-label":"Postęp do następnego poziomu: "+Math.round(lv.pct*100)+"%"},h("i",{style:"width:"+Math.round(lv.pct*100)+"%"})),"+"+Math.round(x.week)+" w tym tyg.")
     ));
   }
   const d=$("#details"); d.hidden=!showDetails; d.replaceChildren();
@@ -169,13 +172,13 @@ function renderBoard(){
       const x=s[p.id], lv=level(x.total);
       d.append(h("div",{class:"rank-row"},
         av(p.id),
-        h("div",{class:"nm"},p.name,h("small",null,lv.nextName?("Lv "+lv.n+" "+lv.name+" · "+lv.toNext+" pkt do: "+lv.nextName):("Lv "+lv.n+" "+lv.name+" · max"))),
-        h("div",{class:"tot"},x.total+" pkt"),
+        h("div",{class:"nm"},p.name,h("small",null,lv.nextName?("Lv "+lv.n+" "+lv.name+" · "+Math.ceil(lv.toNext)+" pkt do: "+lv.nextName):("Lv "+lv.n+" "+lv.name+" · max"))),
+        h("div",{class:"tot"},Math.round(x.total)+" pkt"),
         h("div",{class:"badges"},BADGES.map(b=>h("span",{class:"badge"+(b.test(x)?" got":""),title:b.hint},b.name)))
       ));
     }
     d.append(h("p",{class:"legend"},
-      h("b",null,"Punkty: "),"odprawa +"+PTS.odprawa+TEAM.filter(p=>p.odprawaPts!=null).map(p=>" ("+p.name+" +"+p.odprawaPts+")").join("")+" · zamknięte zadanie +"+PTS.done+" · w terminie +"+PTS.ontime+" bonusu · wpis +"+PTS.add+" · dodanie terminu +"+PTS.due+" · komentarz +"+PTS.comment+". ",
+      h("b",null,"Punkty: "),"odprawa +"+PTS.odprawa+" · zamknięte zadanie +"+PTS.done+" · w terminie +"+PTS.ontime+" bonusu · wpis +"+PTS.add+" · dodanie terminu +"+PTS.due+" · komentarz +"+PTS.comment+". "+TEAM.filter(p=>p.ptsFactor!=null).map(p=>p.name+" dostaje 1/"+Math.round(1/p.ptsFactor)+" każdej wartości. ").join(""),
       "Punkty liczą się z wpisów, więc otwarcie zadania ponownie je odejmuje. Odznaki opisuje podpowiedź po najechaniu."));
   }
 }
@@ -434,7 +437,7 @@ async function addItem(){
   if(!visible({...doc,id:ref.id})){who="all";save("person","all");q="";$("#q").value="";renderFilters();}
   const ok=await write(()=>ref.set(doc));
   if(ok){closeCompose();mobTab=prio;renderTabs();}
-  if(ok) toast(T[me].name+" · "+(kind==="task"?"dodane do: ":"notatka w: ")+SEC[prio].label,"+"+(PTS.add+(dueCounts?PTS.due:0))+" pkt");
+  if(ok) toast(T[me].name+" · "+(kind==="task"?"dodane do: ":"notatka w: ")+SEC[prio].label,myPts(PTS.add+(dueCounts?PTS.due:0)));
   else ta.value=text;
 }
 async function setText(t,val){
@@ -475,7 +478,7 @@ async function toggleDone(t){
   if(!ok) return;
   if(nowDone){
     const bonus=t.due&&patch.doneAt<=endOfDay(t.due);
-    toast(T[me].name+(bonus?" · zamknięte w terminie":" · zadanie zamknięte"),"+"+(PTS.done+(bonus?PTS.ontime:0))+" pkt");
+    toast(T[me].name+(bonus?" · zamknięte w terminie":" · zadanie zamknięte"),myPts(PTS.done+(bonus?PTS.ontime:0)));
     confetti();
   } else toast("Zadanie znów otwarte");
 }
@@ -489,7 +492,7 @@ async function setDue(t,val){
   const patch=!val?{due:null,dueBy:null,dueAt:null}:first?{due:val,dueBy:me,dueAt:Date.now()}:{due:val};
   const ok=await write(()=>db.doc("tasks/"+t.id).update(patch));
   busy.delete(t.id);
-  if(ok){openDue.delete(t.id);renderCols();toast(val?("Termin: "+dueShort(val)):"Usunięto termin",first&&t.kind==="task"?"+"+PTS.due+" pkt":null);}
+  if(ok){openDue.delete(t.id);renderCols();toast(val?("Termin: "+dueShort(val)):"Usunięto termin",first&&t.kind==="task"?myPts(PTS.due):null);}
 }
 async function addComment(t,val){
   if(needMe()) return;
@@ -497,13 +500,13 @@ async function addComment(t,val){
   const ref=db.collection("comments").doc();
   drafts[t.id]="";
   const ok=await write(()=>ref.set({taskId:t.id,text:text.slice(0,400),by:me,at:Date.now()}));
-  if(ok){toast(T[me].name+" · komentarz","+"+PTS.comment+" pkt");focusLater("cm-"+t.id);} else drafts[t.id]=text;
+  if(ok){toast(T[me].name+" · komentarz",myPts(PTS.comment));focusLater("cm-"+t.id);} else drafts[t.id]=text;
 }
 async function removeComment(c){
   confirmDelC.delete(c.id);
   if(c.by!==me) return;
   const ok=await write(()=>db.doc("comments/"+c.id).delete());
-  if(ok) toast(T[me].name+" · komentarz usunięty",isGuest()?null:"−"+PTS.comment+" pkt");
+  if(ok) toast(T[me].name+" · komentarz usunięty",isGuest()?null:myPts(PTS.comment).replace("+","−"));
 }
 async function removeItem(t){
   if(isGuest()) return;
@@ -528,7 +531,7 @@ async function logOdprawa(){
   const ref=db.collection("odprawy").doc();
   const ok=await write(()=>ref.set({who:me,by:me,at:Date.now()}));
   if(!ok){renderRotation();return;}
-  toast(T[me].name+" · odprawa zaliczona","+"+odprawaPts(me)+" pkt");
+  toast(T[me].name+" · odprawa zaliczona",myPts(PTS.odprawa));
   confetti();
 }
 
