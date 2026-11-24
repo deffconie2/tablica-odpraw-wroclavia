@@ -117,8 +117,8 @@ function cmp(a,b){
 /* scoring — always derived from the records, never stored.
    meta/points holds per-person reset times: records before a person's reset don't count for them */
 const factor=w=>T[w]&&T[w].ptsFactor!=null?T[w].ptsFactor:1;
-// each award is rounded to a whole point for the person (Karolina: 10→3, 5→2, 2→1, 1→0)
-const award=(w,pts)=>Math.round(pts*factor(w));
+// each award is rounded to a whole point for the person, never below 1 (Karolina: 10→3, 5→2, 2→1, 1→1)
+const award=(w,pts)=>pts>0?Math.max(1,Math.round(pts*factor(w))):0;
 const myPts=(...parts)=>"+"+parts.reduce((a,p)=>a+award(me,p),0)+" pkt";
 const counts=(w,at)=>!!T[w]&&!T[w].guest&&!(resets[w]&&at<resets[w]);
 function stats(){
