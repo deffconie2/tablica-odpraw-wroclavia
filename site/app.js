@@ -5,7 +5,7 @@ const TEAM=[
   {id:"kamil", name:"Kamil", dla:"Kamila", init:"K", color:"var(--p-kamil)",  f:false},
   {id:"michal",name:"Michał",dla:"Michała",init:"M", color:"var(--p-michal)", f:false},
   {id:"malgorzata",name:"Gosia",dla:"Gosi",init:"G", color:"var(--p-malgorzata)",f:true,guest:true},
-  {id:"karolina",name:"Karolina",dla:"Karoliny",init:"Ka",color:"var(--p-karolina)",f:true,gold:true,ptsFactor:1/3}, // Karolina earns a third of every point (she is at every daily odprawa)
+  {id:"karolina",name:"Karolina",dla:"Karoliny",init:"Ka",color:"var(--p-karolina)",f:true,gold:true,odprawaFactor:1/3}, // Karolina is at every daily odprawa, so a third of the odprawa points
 ];
 const T=Object.fromEntries(TEAM.map(p=>[p.id,p]));
 // guests view the board, add tasks and comment; no points, no odprawa, no closing/moving/deleting
@@ -116,15 +116,14 @@ function cmp(a,b){
 
 /* scoring — always derived from the records, never stored.
    meta/points holds per-person reset times: records before a person's reset don't count for them */
-const factor=w=>T[w]&&T[w].ptsFactor!=null?T[w].ptsFactor:1;
-// each award is rounded to a whole point for the person, never below 1 (Karolina: 10→3, 5→2, 2→1, 1→1)
-const award=(w,pts)=>pts>0?Math.max(1,Math.round(pts*factor(w))):0;
-const myPts=(...parts)=>"+"+parts.reduce((a,p)=>a+award(me,p),0)+" pkt";
+// odprawa points for a person, rounded to whole and never below 1 (Karolina: 10→3)
+const odprawaPts=w=>{const f=T[w]&&T[w].odprawaFactor!=null?T[w].odprawaFactor:1;return Math.max(1,Math.round(PTS.odprawa*f));};
+const myPts=(...parts)=>"+"+parts.reduce((a,p)=>a+p,0)+" pkt";
 const counts=(w,at)=>!!T[w]&&!T[w].guest&&!(resets[w]&&at<resets[w]);
 function stats(){
   const ws=weekStart(), s={};
   TEAM.forEach(p=>s[p.id]={week:0,total:0,doneWeek:0,ontime:0,notes:0,comments:0,odprawy:0});
-  const add=(w,pts,at)=>{if(!counts(w,at))return false;pts=award(w,pts);s[w].total+=pts;if(at>=ws)s[w].week+=pts;return true;};
+  const add=(w,pts,at)=>{if(!counts(w,at))return false;s[w].total+=pts;if(at>=ws)s[w].week+=pts;return true;};
   const ids=new Set(tasks.map(t=>t.id));
   for(const t of tasks){
     if(add(t.by,PTS.add,t.createdAt)&&t.kind==="note") s[t.by].notes++;
@@ -136,7 +135,7 @@ function stats(){
     }
   }
   for(const c of comments){ if(ids.has(c.taskId)&&add(c.by,PTS.comment,c.at)) s[c.by].comments++; }
-  for(const o of odprawy){ if(add(o.who,PTS.odprawa,o.at)) s[o.who].odprawy++; }
+  for(const o of odprawy){ if(add(o.who,odprawaPts(o.who),o.at)) s[o.who].odprawy++; }
   return s;
 }
 function level(total){
@@ -178,7 +177,7 @@ function renderBoard(){
       ));
     }
     d.append(h("p",{class:"legend"},
-      h("b",null,"Punkty: "),"odprawa +"+PTS.odprawa+" · zamknięte zadanie +"+PTS.done+" · w terminie +"+PTS.ontime+" bonusu · wpis +"+PTS.add+" · dodanie terminu +"+PTS.due+" · komentarz +"+PTS.comment+". "+TEAM.filter(p=>p.ptsFactor!=null).map(p=>p.name+" dostaje 1/"+Math.round(1/p.ptsFactor)+" każdej wartości, zaokrąglone do całości ("+[["odprawa",PTS.odprawa],["zadanie",PTS.done],["wpis",PTS.add],["termin",PTS.due],["komentarz",PTS.comment]].map(([n,v])=>n+" +"+award(p.id,v)).join(", ")+"). ").join(""),
+      h("b",null,"Punkty: "),"odprawa +"+PTS.odprawa+" · zamknięte zadanie +"+PTS.done+" · w terminie +"+PTS.ontime+" bonusu · wpis +"+PTS.add+" · dodanie terminu +"+PTS.due+" · komentarz +"+PTS.comment+". "+TEAM.filter(p=>p.odprawaFactor!=null).map(p=>p.name+" za odprawę dostaje +"+odprawaPts(p.id)+". ").join(""),
       "Punkty liczą się z wpisów, więc otwarcie zadania ponownie je odejmuje. Odznaki opisuje podpowiedź po najechaniu."));
   }
 }
@@ -531,7 +530,7 @@ async function logOdprawa(){
   const ref=db.collection("odprawy").doc();
   const ok=await write(()=>ref.set({who:me,by:me,at:Date.now()}));
   if(!ok){renderRotation();return;}
-  toast(T[me].name+" · odprawa zaliczona",myPts(PTS.odprawa));
+  toast(T[me].name+" · odprawa zaliczona",myPts(odprawaPts(me)));
   confetti();
 }
 
